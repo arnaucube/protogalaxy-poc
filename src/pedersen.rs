@@ -67,7 +67,7 @@ where
         v: &Vec<C::ScalarField>,
         r: &C::ScalarField, // random value is provided, in order to be choosen by other parts of the protocol
     ) -> Commitment<C> {
-        let cm = params.h.mul(r) + C::msm(&params.generators, v).unwrap();
+        let cm = params.h.mul(r) + C::msm(&params.generators[..v.len()], v).unwrap();
         Commitment::<C>(cm)
     }
 

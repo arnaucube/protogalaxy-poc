@@ -41,30 +41,60 @@ where
         r1cs: R1CS<C::ScalarField>,
         // running instance
         instance: CommittedInstance<C>,
-        w: Vec<C::ScalarField>,
+        w: Witness<C>,
         // incomming instances
         vec_instances: Vec<CommittedInstance<C>>,
-        vec_w: Vec<C::ScalarField>,
+        vec_w: Vec<Witness<C>>,
     ) {
         let t = instance.betas.len();
-        let n = w.len();
+        let n = r1cs.A[0].len();
 
         let delta = tr.get_challenge();
 
         let deltas = powers_of_beta(delta, t);
 
-        let f_w = eval_f(&r1cs, &w);
+        let f_w = eval_f(&r1cs, &w.w);
+        dbg!(w.w.len());
+        dbg!(f_w.len());
+        dbg!(n);
 
         // F(X)
         let mut F_X: SparsePolynomial<C::ScalarField> = SparsePolynomial::zero();
         for i in 0..n {
             let lhs = pow_i_over_x::<C::ScalarField>(i, &instance.betas, &deltas);
-            F_X = F_X.add(&lhs * f_w[i]);
+            let curr = &lhs * f_w[i];
+            F_X = F_X.add(curr);
         }
         // TODO return F(X)
 
         let alpha = tr.get_challenge();
-        // WIP
+        // eval F(alpha)
+        let F_alpha = F_X.evaluate(&alpha);
+
+        // betas*
+        let betas_star: Vec<C::ScalarField> = instance
+            .betas
+            .iter()
+            .zip(
+                deltas
+                    .iter()
+                    .map(|delta_i| alpha * delta_i)
+                    .collect::<Vec<C::ScalarField>>(),
+            )
+            .map(|(beta_i, delta_i_alpha)| *beta_i + delta_i_alpha)
+            .collect();
+
+        // sanity check: check that the new randomized instnace (the original instance but with
+        // 'refreshed' randomness) satisfies the relation.
+        assert!(check_instance(
+            r1cs,
+            CommittedInstance {
+                phi: instance.phi,
+                betas: betas_star,
+                e: F_alpha,
+            },
+            w.clone(),
+        ));
     }
 }
 
@@ -125,12 +155,18 @@ fn check_instance<C: CurveGroup>(
     w: Witness<C>,
 ) -> bool {
     let n = 2_u64.pow(instance.betas.len() as u32) as usize;
+    dbg!(n);
+    dbg!(w.w.len());
 
     let f_w = eval_f(&r1cs, &w.w); // f(w)
+    dbg!(f_w.len());
 
     let mut r = C::ScalarField::zero();
     for i in 0..n {
         r += pow_i(i, &instance.betas) * f_w[i];
+    }
+    if instance.e == r {
+        return true;
     }
     false
 }
@@ -166,22 +202,37 @@ mod tests {
         // R1CS for: x^3 + x + 5 = y (example from article
         // https://www.vitalik.ca/general/2016/12/10/qap.html )
         let A = to_F_matrix::<F>(vec![
-            vec![0, 1, 0, 0, 0, 0],
-            vec![0, 0, 0, 1, 0, 0],
-            vec![0, 1, 0, 0, 1, 0],
-            vec![5, 0, 0, 0, 0, 1],
+            vec![0, 1, 0, 0, 0, 0, /**/ 0, 0],
+            vec![0, 0, 0, 1, 0, 0, /**/ 0, 0],
+            vec![0, 1, 0, 0, 1, 0, /**/ 0, 0],
+            vec![5, 0, 0, 0, 0, 1, /**/ 0, 0],
+            //
+            vec![0, 0, 0, 0, 0, 0, /**/ 0, 0],
+            vec![0, 0, 0, 0, 0, 0, /**/ 0, 0],
+            vec![0, 0, 0, 0, 0, 0, /**/ 0, 0],
+            vec![0, 0, 0, 0, 0, 0, /**/ 0, 0],
         ]);
         let B = to_F_matrix::<F>(vec![
-            vec![0, 1, 0, 0, 0, 0],
-            vec![0, 1, 0, 0, 0, 0],
-            vec![1, 0, 0, 0, 0, 0],
-            vec![1, 0, 0, 0, 0, 0],
+            vec![0, 1, 0, 0, 0, 0, /**/ 0, 0],
+            vec![0, 1, 0, 0, 0, 0, /**/ 0, 0],
+            vec![1, 0, 0, 0, 0, 0, /**/ 0, 0],
+            vec![1, 0, 0, 0, 0, 0, /**/ 0, 0],
+            //
+            vec![0, 0, 0, 0, 0, 0, /**/ 0, 0],
+            vec![0, 0, 0, 0, 0, 0, /**/ 0, 0],
+            vec![0, 0, 0, 0, 0, 0, /**/ 0, 0],
+            vec![0, 0, 0, 0, 0, 0, /**/ 0, 0],
         ]);
         let C = to_F_matrix::<F>(vec![
-            vec![0, 0, 0, 1, 0, 0],
-            vec![0, 0, 0, 0, 1, 0],
-            vec![0, 0, 0, 0, 0, 1],
-            vec![0, 0, 1, 0, 0, 0],
+            vec![0, 0, 0, 1, 0, 0, /**/ 0, 0],
+            vec![0, 0, 0, 0, 1, 0, /**/ 0, 0],
+            vec![0, 0, 0, 0, 0, 1, /**/ 0, 0],
+            vec![0, 0, 1, 0, 0, 0, /**/ 0, 0],
+            //
+            vec![0, 0, 0, 0, 0, 0, /**/ 0, 0],
+            vec![0, 0, 0, 0, 0, 0, /**/ 0, 0],
+            vec![0, 0, 0, 0, 0, 0, /**/ 0, 0],
+            vec![0, 0, 0, 0, 0, 0, /**/ 0, 0],
         ]);
 
         let r1cs = R1CS::<F> { A, B, C };
@@ -197,6 +248,8 @@ mod tests {
             input * input,                     // x^2
             input * input * input,             // x^2 * x
             input * input * input + input,     // x^3 + x
+            0,                                 // pad to pow of 2
+            0,
         ])
     }
 
@@ -242,5 +295,47 @@ mod tests {
         z[1] = Fr::from(111);
         let f_w = eval_f(&r1cs, &z);
         assert!(!is_zero_vec(&f_w));
+    }
+
+    #[test]
+    fn test_fold_prover() {
+        let mut rng = ark_std::test_rng();
+        let pedersen_params = Pedersen::<G1Projective>::new_params(&mut rng, 100); // 100 is wip, will get it from actual vec
+        let poseidon_config = poseidon_test_config::<Fr>();
+
+        let r1cs = get_test_r1cs::<Fr>();
+        let mut z = get_test_z::<Fr>(3);
+
+        // init Prover's transcript
+        let mut transcript_p = Transcript::<Fr, G1Projective>::new(&poseidon_config);
+
+        let n = z.len();
+        let t = log2(n) as usize;
+        dbg!(n);
+        dbg!(t);
+
+        let beta = Fr::rand(&mut rng);
+        let betas = powers_of_beta(beta, t);
+
+        let witness = Witness::<G1Projective> {
+            w: z, // WIP
+            r_w: Fr::rand(&mut rng),
+        };
+        let phi = Pedersen::<G1Projective>::commit(&pedersen_params, &witness.w, &witness.r_w);
+        let instance = CommittedInstance::<G1Projective> {
+            phi,
+            betas,
+            e: Fr::zero(),
+        };
+
+        Folding::<G1Projective>::prover(
+            &mut transcript_p,
+            &pedersen_params,
+            r1cs,
+            instance,
+            witness,
+            Vec::new(),
+            Vec::new(),
+        );
     }
 }
