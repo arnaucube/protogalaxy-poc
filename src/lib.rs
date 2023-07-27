@@ -4,5 +4,6 @@
 #![allow(dead_code)] // TMP
 
 pub mod pedersen;
+pub mod protogalaxy;
 pub mod transcript;
 pub mod utils;
