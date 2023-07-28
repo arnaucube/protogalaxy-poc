@@ -1,6 +1,6 @@
 # protogalaxy-poc
 
-Proof of concept implementation of ProtoGalaxy (https://eprint.iacr.org/2023/1106.pdf).
+Proof of concept implementation of ProtoGalaxy (https://eprint.iacr.org/2023/1106.pdf) using [arkworks](https://github.com/arkworks-rs).
 
 > Do not use in production.
 
