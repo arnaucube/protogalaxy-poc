@@ -1,4 +1,4 @@
-/// pedersen.rs file and adapted from https://github.com/arnaucube/nova-study
+/// pedersen.rs file adapted from https://github.com/arnaucube/nova-study
 use ark_ec::{CurveGroup, Group};
 use ark_std::{
     rand::{Rng, RngCore},

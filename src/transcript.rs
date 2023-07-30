@@ -1,4 +1,4 @@
-/// transcript.rs file and adapted from https://github.com/arnaucube/nova-study
+/// transcript.rs file adapted from https://github.com/arnaucube/nova-study
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::PrimeField;
 use std::marker::PhantomData;

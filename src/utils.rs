@@ -1,7 +1,7 @@
 use ark_ff::fields::PrimeField;
 use ark_std::cfg_iter;
 
-pub fn vec_add<F: PrimeField>(a: &Vec<F>, b: &[F]) -> Vec<F> {
+pub fn vec_add<F: PrimeField>(a: &[F], b: &[F]) -> Vec<F> {
     let mut r: Vec<F> = vec![F::zero(); a.len()];
     for i in 0..a.len() {
         r[i] = a[i] + b[i];
@@ -9,7 +9,7 @@ pub fn vec_add<F: PrimeField>(a: &Vec<F>, b: &[F]) -> Vec<F> {
     r
 }
 
-pub fn vec_sub<F: PrimeField>(a: &Vec<F>, b: &Vec<F>) -> Vec<F> {
+pub fn vec_sub<F: PrimeField>(a: &[F], b: &[F]) -> Vec<F> {
     let mut r: Vec<F> = vec![F::zero(); a.len()];
     for i in 0..a.len() {
         r[i] = a[i] - b[i];
@@ -45,7 +45,7 @@ pub fn mat_vec_mul<F: PrimeField>(M: &Vec<Vec<F>>, z: &[F]) -> Vec<F> {
     r
 }
 
-pub fn hadamard<F: PrimeField>(a: &Vec<F>, b: &Vec<F>) -> Vec<F> {
+pub fn hadamard<F: PrimeField>(a: &[F], b: &[F]) -> Vec<F> {
     cfg_iter!(a).zip(b).map(|(a, b)| *a * b).collect()
 }
 
