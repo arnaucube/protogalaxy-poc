@@ -1,4 +1,4 @@
-# protogalaxy-poc
+# protogalaxy-poc [![Test](https://github.com/arnaucube/protogalaxy-poc/workflows/Test/badge.svg)](https://github.com/arnaucube/protogalaxy-poc/actions?query=workflow%3ATest)
 
 Proof of concept implementation of ProtoGalaxy (https://eprint.iacr.org/2023/1106.pdf) using [arkworks](https://github.com/arkworks-rs).
 
