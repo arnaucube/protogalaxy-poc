@@ -2,7 +2,7 @@
 
 Proof of concept implementation of ProtoGalaxy (https://eprint.iacr.org/2023/1106.pdf) using [arkworks](https://github.com/arkworks-rs).
 
-> Do not use in production.
+> Experimental code, do not use in production.
 
 Thanks to [Liam Eagen](https://twitter.com/LiamEagen) and [Ariel Gabizon](https://twitter.com/rel_zeta_tech) for their kind explanations.
 
@@ -56,8 +56,10 @@ let betas = powers_of_beta(beta, t);
 let (F_coeffs, K_coeffs, folded_instance, folded_witness) = Folding::<G1Projective>::prover(
     &mut transcript_p,
     &r1cs,
+    // running instance
     instance.clone(),
     witness,
+    // incomming instances
     instances.clone(),
     witnesses,
 );
@@ -66,8 +68,8 @@ let (F_coeffs, K_coeffs, folded_instance, folded_witness) = Folding::<G1Projecti
 let folded_instance_v = Folding::<G1Projective>::verifier(
     &mut transcript_v,
     &r1cs,
-    instance,
-    instances,
+    instance, // running instance
+    instances, // incomming instances
     F_coeffs,
     K_coeffs,
 );
@@ -75,6 +77,6 @@ let folded_instance_v = Folding::<G1Projective>::verifier(
 // check that the folded instance satisfies the relation
 assert!(check_instance(&r2cs, folded_instance, folded_witness));
 
-// now, the folded instance & witness can be folded again with n other instances.
+// now, the folded instance & witness can be folded again with k other instances.
 ```
 (see the actual code for more details)

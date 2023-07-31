@@ -1,9 +1,6 @@
 /// pedersen.rs file adapted from https://github.com/arnaucube/nova-study
 use ark_ec::{CurveGroup, Group};
-use ark_std::{
-    rand::{Rng, RngCore},
-    UniformRand,
-};
+use ark_std::{rand::Rng, UniformRand};
 use std::marker::PhantomData;
 
 use crate::utils::{vec_add, vec_scalar_mul};
@@ -11,11 +8,6 @@ use crate::utils::{vec_add, vec_scalar_mul};
 use crate::transcript::Transcript;
 use ark_crypto_primitives::sponge::Absorb;
 
-pub struct ProofElem<C: CurveGroup> {
-    R: C,
-    t1: C::ScalarField,
-    t2: C::ScalarField,
-}
 pub struct Proof<C: CurveGroup> {
     R: C,
     u_: Vec<C::ScalarField>,
@@ -23,7 +15,6 @@ pub struct Proof<C: CurveGroup> {
 }
 
 pub struct Params<C: CurveGroup> {
-    g: C,
     h: C,
     pub generators: Vec<C::Affine>,
 }
@@ -46,22 +37,12 @@ where
         let g: C = C::generator();
         let generators: Vec<C::Affine> = vec![C::Affine::rand(rng); max];
         let params: Params<C> = Params::<C> {
-            g,
             h: g.mul(h_scalar),
             generators,
         };
         params
     }
 
-    pub fn commit_elem<R: RngCore>(
-        rng: &mut R,
-        params: &Params<C>,
-        v: &C::ScalarField,
-    ) -> CommitmentElem<C> {
-        let r = C::ScalarField::rand(rng);
-        let cm: C = params.g.mul(v) + params.h.mul(r);
-        CommitmentElem::<C> { cm, r }
-    }
     pub fn commit(
         params: &Params<C>,
         v: &Vec<C::ScalarField>,
@@ -71,27 +52,6 @@ where
         Commitment::<C>(cm)
     }
 
-    pub fn prove_elem(
-        params: &Params<C>,
-        transcript: &mut Transcript<C::ScalarField, C>,
-        cm: C,
-        v: C::ScalarField,
-        r: C::ScalarField,
-    ) -> ProofElem<C> {
-        let r1 = transcript.get_challenge();
-        let r2 = transcript.get_challenge();
-
-        let R: C = params.g.mul(r1) + params.h.mul(r2);
-
-        transcript.add_point(&cm);
-        transcript.add_point(&R);
-        let e = transcript.get_challenge();
-
-        let t1 = r1 + v * e;
-        let t2 = r2 + r * e;
-
-        ProofElem::<C> { R, t1, t2 }
-    }
     pub fn prove(
         params: &Params<C>,
         transcript: &mut Transcript<C::ScalarField, C>,
@@ -133,50 +93,10 @@ where
         }
         true
     }
-
-    pub fn verify_elem(
-        params: &Params<C>,
-        transcript: &mut Transcript<C::ScalarField, C>,
-        cm: C,
-        proof: ProofElem<C>,
-    ) -> bool {
-        // s1, s2 just to match Prover's transcript
-        transcript.get_challenge(); // r_1
-        transcript.get_challenge(); // r_2
-
-        transcript.add_point(&cm);
-        transcript.add_point(&proof.R);
-        let e = transcript.get_challenge();
-        let lhs = proof.R + cm.mul(e);
-        let rhs = params.g.mul(proof.t1) + params.h.mul(proof.t2);
-        if lhs != rhs {
-            return false;
-        }
-        true
-    }
 }
 
 #[derive(Clone, Debug)]
 pub struct Commitment<C: CurveGroup>(pub C);
-
-pub struct CommitmentElem<C: CurveGroup> {
-    pub cm: C,
-    pub r: C::ScalarField,
-}
-impl<C: CurveGroup> CommitmentElem<C>
-where
-    <C as Group>::ScalarField: Absorb,
-    <C as CurveGroup>::BaseField: Absorb,
-{
-    pub fn prove(
-        &self,
-        params: &Params<C>,
-        transcript: &mut Transcript<C::ScalarField, C>,
-        v: C::ScalarField,
-    ) -> ProofElem<C> {
-        Pedersen::<C>::prove_elem(params, transcript, self.cm, v, self.r)
-    }
-}
 
 #[cfg(test)]
 mod tests {
@@ -184,30 +104,6 @@ mod tests {
     use crate::transcript::poseidon_test_config;
     use ark_bls12_381::{Fr, G1Projective};
 
-    #[test]
-    fn test_pedersen_single_element() {
-        let mut rng = ark_std::test_rng();
-
-        // setup params
-        let params = Pedersen::<G1Projective>::new_params(
-            &mut rng, 0, /* 0, as here we don't use commit_vec */
-        );
-        let poseidon_config = poseidon_test_config::<Fr>();
-
-        // init Prover's transcript
-        let mut transcript_p = Transcript::<Fr, G1Projective>::new(&poseidon_config);
-        // init Verifier's transcript
-        let mut transcript_v = Transcript::<Fr, G1Projective>::new(&poseidon_config);
-
-        let v = Fr::rand(&mut rng);
-
-        let cm = Pedersen::commit_elem(&mut rng, &params, &v);
-        let proof = cm.prove(&params, &mut transcript_p, v);
-        // also can use:
-        // let proof = Pedersen::prove_elem(&params, &mut transcript_p, cm.cm, v, cm.r);
-        let v = Pedersen::verify_elem(&params, &mut transcript_v, cm.cm, proof);
-        assert!(v);
-    }
     #[test]
     fn test_pedersen_vector() {
         let mut rng = ark_std::test_rng();

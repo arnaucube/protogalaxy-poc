@@ -2,6 +2,7 @@ use ark_ff::fields::PrimeField;
 use ark_std::cfg_iter;
 
 pub fn vec_add<F: PrimeField>(a: &[F], b: &[F]) -> Vec<F> {
+    assert_eq!(a.len(), b.len());
     let mut r: Vec<F> = vec![F::zero(); a.len()];
     for i in 0..a.len() {
         r[i] = a[i] + b[i];
@@ -10,6 +11,7 @@ pub fn vec_add<F: PrimeField>(a: &[F], b: &[F]) -> Vec<F> {
 }
 
 pub fn vec_sub<F: PrimeField>(a: &[F], b: &[F]) -> Vec<F> {
+    assert_eq!(a.len(), b.len());
     let mut r: Vec<F> = vec![F::zero(); a.len()];
     for i in 0..a.len() {
         r[i] = a[i] - b[i];
@@ -33,23 +35,25 @@ pub fn is_zero_vec<F: PrimeField>(vec: &[F]) -> bool {
     true
 }
 
-#[allow(clippy::needless_range_loop)]
 pub fn mat_vec_mul<F: PrimeField>(M: &Vec<Vec<F>>, z: &[F]) -> Vec<F> {
-    // TODO assert len
+    assert!(!M.is_empty());
+    assert_eq!(M[0].len(), z.len());
+
     let mut r: Vec<F> = vec![F::zero(); M.len()];
-    for i in 0..M.len() {
-        for j in 0..M[i].len() {
-            r[i] += M[i][j] * z[j];
+    for (i, M_i) in M.iter().enumerate() {
+        for (j, M_ij) in M_i.iter().enumerate() {
+            r[i] += *M_ij * z[j];
         }
     }
     r
 }
 
 pub fn hadamard<F: PrimeField>(a: &[F], b: &[F]) -> Vec<F> {
+    assert_eq!(a.len(), b.len());
     cfg_iter!(a).zip(b).map(|(a, b)| *a * b).collect()
 }
 
-// returns (b, b^2, b^4, ..., b^{2^{t-1}}) TODO find better name
+// returns (b, b^2, b^4, ..., b^{2^{t-1}})
 pub fn powers_of_beta<F: PrimeField>(b: F, t: usize) -> Vec<F> {
     let mut r = vec![F::zero(); t];
     r[0] = b;
@@ -61,8 +65,8 @@ pub fn powers_of_beta<F: PrimeField>(b: F, t: usize) -> Vec<F> {
 pub fn all_powers<F: PrimeField>(a: F, n: usize) -> Vec<F> {
     let mut r = vec![F::zero(); n];
     // TODO more efficiently
-    for i in 0..n {
-        r[i] = a.pow([i as u64]);
+    for (i, r_i) in r.iter_mut().enumerate() {
+        *r_i = a.pow([i as u64]);
     }
     r
 }

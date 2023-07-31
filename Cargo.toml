@@ -12,7 +12,6 @@ ark-ec = { version = "0.4.0", default-features = false }
 ark-poly = "0.4.0"
 ark-serialize = { version = "0.4.0", default-features = false, features = [ "derive" ] }
 rand = { version = "0.8", features = [ "std", "std_rng" ] }
-merlin = { version = "3.0.0" }
 ark-crypto-primitives = { version = "^0.4.0", default-features = false, features = [ "r1cs", "snark", "sponge", "crh" ] }
 
 [dev-dependencies]

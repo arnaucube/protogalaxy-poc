@@ -37,21 +37,21 @@ where
     <C as Group>::ScalarField: Absorb,
     <C as CurveGroup>::BaseField: Absorb,
 {
-    // WIP naming of functions
-    pub fn prover(
+    #![allow(clippy::type_complexity)]
+    pub fn prove(
         transcript: &mut Transcript<C::ScalarField, C>,
         r1cs: &R1CS<C::ScalarField>,
         // running instance
-        instance: CommittedInstance<C>,
-        w: Witness<C>,
+        instance: &CommittedInstance<C>,
+        w: &Witness<C>,
         // incomming instances
-        vec_instances: Vec<CommittedInstance<C>>,
-        vec_w: Vec<Witness<C>>,
+        vec_instances: &[CommittedInstance<C>],
+        vec_w: &[Witness<C>],
     ) -> (
-        Vec<C::ScalarField>,
-        Vec<C::ScalarField>,
         CommittedInstance<C>,
         Witness<C>,
+        Vec<C::ScalarField>,
+        Vec<C::ScalarField>,
     ) {
         let t = instance.betas.len();
         let n = r1cs.A[0].len();
@@ -66,9 +66,9 @@ where
 
         // F(X)
         let mut F_X: SparsePolynomial<C::ScalarField> = SparsePolynomial::zero();
-        for i in 0..n {
+        for (i, f_w_i) in f_w.iter().enumerate() {
             let lhs = pow_i_over_x::<C::ScalarField>(i, &instance.betas, &deltas);
-            let curr = &lhs * f_w[i];
+            let curr = &lhs * *f_w_i;
             F_X = F_X.add(curr);
         }
 
@@ -102,7 +102,7 @@ where
                 betas: betas_star.clone(),
                 e: F_alpha,
             },
-            &w,
+            w,
         ));
 
         let mut ws: Vec<Vec<C::ScalarField>> = Vec::new();
@@ -146,12 +146,11 @@ where
             let f_ev = eval_f(r1cs, &inner);
 
             let mut Gsum = C::ScalarField::zero();
-            for i in 0..n {
+            for (i, f_ev_i) in f_ev.iter().enumerate() {
                 let pow_i_betas = pow_i(i, &betas_star);
-                let curr = pow_i_betas * f_ev[i];
+                let curr = pow_i_betas * f_ev_i;
                 Gsum += curr;
             }
-            // G_evals[hi] = Gsum / Z_X.evaluate(&h); // WIP
             G_evals[hi] = Gsum;
         }
         let G_X: DensePolynomial<C::ScalarField> =
@@ -162,7 +161,7 @@ where
         let G_L0e = &G_X - &L0_e;
         // TODO move division by Z_X to the prev loop
         let (K_X, remainder) = G_L0e.divide_by_vanishing_poly(H).unwrap();
-        assert!(remainder.is_zero());
+        assert!(remainder.is_zero()); // sanity check
 
         transcript.add_vec(&K_X.coeffs);
 
@@ -188,8 +187,6 @@ where
         }
 
         (
-            F_X_dense.coeffs,
-            K_X.coeffs,
             CommittedInstance {
                 betas: betas_star,
                 phi: Commitment(phi_star),
@@ -197,18 +194,20 @@ where
             },
             Witness {
                 w: w_star,
-                r_w: w.r_w, // wip, fold also r_w (blinding used for the w commitment)
+                r_w: r_w_star,
             },
+            F_X_dense.coeffs,
+            K_X.coeffs,
         )
     }
 
-    pub fn verifier(
+    pub fn verify(
         transcript: &mut Transcript<C::ScalarField, C>,
         r1cs: &R1CS<C::ScalarField>,
         // running instance
-        instance: CommittedInstance<C>,
+        instance: &CommittedInstance<C>,
         // incomming instances
-        vec_instances: Vec<CommittedInstance<C>>,
+        vec_instances: &[CommittedInstance<C>],
         // polys from P
         F_coeffs: Vec<C::ScalarField>,
         K_coeffs: Vec<C::ScalarField>,
@@ -337,13 +336,13 @@ fn check_instance<C: CurveGroup>(
     instance: &CommittedInstance<C>,
     w: &Witness<C>,
 ) -> bool {
-    let n = 2_u64.pow(instance.betas.len() as u32) as usize;
+    assert_eq!(instance.betas.len(), log2(w.w.len()) as usize);
 
     let f_w = eval_f(r1cs, &w.w); // f(w)
 
     let mut r = C::ScalarField::zero();
-    for i in 0..n {
-        r += pow_i(i, &instance.betas) * f_w[i];
+    for (i, f_w_i) in f_w.iter().enumerate() {
+        r += pow_i(i, &instance.betas) * f_w_i;
     }
     if instance.e == r {
         return true;
@@ -550,21 +549,21 @@ mod tests {
         let mut transcript_p = Transcript::<Fr, G1Projective>::new(&poseidon_config);
         let mut transcript_v = Transcript::<Fr, G1Projective>::new(&poseidon_config);
 
-        let (F_coeffs, K_coeffs, folded_instance, folded_witness) = Folding::<G1Projective>::prover(
+        let (folded_instance, folded_witness, F_coeffs, K_coeffs) = Folding::<G1Projective>::prove(
             &mut transcript_p,
             &r1cs,
-            instance.clone(),
-            witness,
-            instances.clone(),
-            witnesses,
+            &instance,
+            &witness,
+            &instances,
+            &witnesses,
         );
 
         // veriier
-        let folded_instance_v = Folding::<G1Projective>::verifier(
+        let folded_instance_v = Folding::<G1Projective>::verify(
             &mut transcript_v,
             &r1cs,
-            instance,
-            instances,
+            &instance,
+            &instances,
             F_coeffs,
             K_coeffs,
         );
@@ -597,22 +596,22 @@ mod tests {
             // generate the instances to be fold
             let (_, _, witnesses, instances) = prepare_inputs(k);
 
-            let (F_coeffs, K_coeffs, folded_instance, folded_witness) =
-                Folding::<G1Projective>::prover(
+            let (folded_instance, folded_witness, F_coeffs, K_coeffs) =
+                Folding::<G1Projective>::prove(
                     &mut transcript_p,
                     &r1cs,
-                    running_instance.clone(),
-                    running_witness.clone(),
-                    instances.clone(),
-                    witnesses,
+                    &running_instance,
+                    &running_witness,
+                    &instances,
+                    &witnesses,
                 );
 
             // veriier
-            let folded_instance_v = Folding::<G1Projective>::verifier(
+            let folded_instance_v = Folding::<G1Projective>::verify(
                 &mut transcript_v,
                 &r1cs,
-                running_instance.clone(),
-                instances,
+                &running_instance,
+                &instances,
                 F_coeffs,
                 K_coeffs,
             );
