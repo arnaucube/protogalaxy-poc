@@ -15,7 +15,7 @@ This code has been done in the context of the research on folding schemes in [0x
 ## Details
 Implementation of ProtoGalaxy's scheme described in section 4 of the paper.
 
-Current version implements the folding on prover & verifier and it works, but it is not optimized.
+Current version implements the folding on prover & verifier and it works for k-to-1 instances and with multiple iterations, but it is not optimized.
 Next steps in terms of implementation include: F(X) O(n) construction following Claim 4.4, compute K(X) in O(kd log(kd)M + ndkC) as described in Claim 4.5, add tests folding in multiple iterations and also in a tree approach, add the decider and integrate with some existing R1CS tooling for the R1CS & witness generation.
 
 ### Usage
@@ -45,7 +45,6 @@ for i in 0..k {
 	betas: betas.clone(),
 	e: Fr::zero(),
     };
-    witnesses.push(witness_i);
     instances.push(instance_i);
 }
 
@@ -76,5 +75,6 @@ let folded_instance_v = Folding::<G1Projective>::verifier(
 // check that the folded instance satisfies the relation
 assert!(check_instance(&r2cs, folded_instance, folded_witness));
 
+// now, the folded instance & witness can be folded again with n other instances.
 ```
 (see the actual code for more details)

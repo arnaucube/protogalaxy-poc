@@ -97,15 +97,13 @@ where
         // 'refreshed' randomness) satisfies the relation.
         assert!(check_instance(
             r1cs,
-            CommittedInstance {
+            &CommittedInstance {
                 phi: instance.phi.clone(),
                 betas: betas_star.clone(),
                 e: F_alpha,
             },
-            w.clone(),
+            &w,
         ));
-
-        let gamma = transcript.get_challenge();
 
         let mut ws: Vec<Vec<C::ScalarField>> = Vec::new();
         ws.push(w.w.clone());
@@ -116,6 +114,7 @@ where
 
         let k = vec_instances.len();
         let H = GeneralEvaluationDomain::<C::ScalarField>::new(k + 1).unwrap();
+        // WIP review t/d
         let EH = GeneralEvaluationDomain::<C::ScalarField>::new(t * k + 1).unwrap();
         let L_X: Vec<DensePolynomial<C::ScalarField>> = lagrange_polys(H);
 
@@ -165,6 +164,10 @@ where
         let (K_X, remainder) = G_L0e.divide_by_vanishing_poly(H).unwrap();
         assert!(remainder.is_zero());
 
+        transcript.add_vec(&K_X.coeffs);
+
+        let gamma = transcript.get_challenge();
+
         let e_star =
             F_alpha * L_X[0].evaluate(&gamma) + Z_X.evaluate(&gamma) * K_X.evaluate(&gamma);
 
@@ -178,6 +181,10 @@ where
                 &w_star,
                 &vec_scalar_mul(&vec_w[i].w, &L_X[i + 1].evaluate(&gamma)),
             );
+        }
+        let mut r_w_star: C::ScalarField = w.r_w * L_X[0].evaluate(&gamma);
+        for i in 0..k {
+            r_w_star += vec_w[i].r_w * L_X[i + 1].evaluate(&gamma);
         }
 
         (
@@ -219,8 +226,8 @@ where
 
         // F(alpha) = e + \sum_t F_i * alpha^i
         let mut F_alpha = instance.e;
-        for (i, F_i) in F_coeffs.iter().enumerate() {
-            F_alpha += *F_i * alphas[i];
+        for (i, F_i) in F_coeffs.iter().skip(1).enumerate() {
+            F_alpha += *F_i * alphas[i + 1];
         }
 
         let betas_star: Vec<C::ScalarField> = instance
@@ -235,14 +242,16 @@ where
             .map(|(beta_i, delta_i_alpha)| *beta_i + delta_i_alpha)
             .collect();
 
-        let gamma = transcript.get_challenge();
-
         let k = vec_instances.len();
         let H = GeneralEvaluationDomain::<C::ScalarField>::new(k + 1).unwrap();
         let L_X: Vec<DensePolynomial<C::ScalarField>> = lagrange_polys(H);
         let Z_X: DensePolynomial<C::ScalarField> = H.vanishing_polynomial().into();
         let K_X: DensePolynomial<C::ScalarField> =
             DensePolynomial::<C::ScalarField>::from_coefficients_vec(K_coeffs);
+
+        transcript.add_vec(&K_X.coeffs);
+
+        let gamma = transcript.get_challenge();
 
         let e_star =
             F_alpha * L_X[0].evaluate(&gamma) + Z_X.evaluate(&gamma) * K_X.evaluate(&gamma);
@@ -325,8 +334,8 @@ fn eval_f<F: PrimeField>(r1cs: &R1CS<F>, w: &[F]) -> Vec<F> {
 
 fn check_instance<C: CurveGroup>(
     r1cs: &R1CS<C::ScalarField>,
-    instance: CommittedInstance<C>,
-    w: Witness<C>,
+    instance: &CommittedInstance<C>,
+    w: &Witness<C>,
 ) -> bool {
     let n = 2_u64.pow(instance.betas.len() as u32) as usize;
 
@@ -473,25 +482,24 @@ mod tests {
         assert!(!is_zero_vec(&f_w));
     }
 
-    #[test]
-    fn test_fold_native_case() {
+    // k represents the number of instances to be fold, appart from the running instance
+    fn prepare_inputs(
+        k: usize,
+    ) -> (
+        Witness<G1Projective>,
+        CommittedInstance<G1Projective>,
+        Vec<Witness<G1Projective>>,
+        Vec<CommittedInstance<G1Projective>>,
+    ) {
         let mut rng = ark_std::test_rng();
         let pedersen_params = Pedersen::<G1Projective>::new_params(&mut rng, 100); // 100 is wip, will get it from actual vec
-        let poseidon_config = poseidon_test_config::<Fr>();
 
-        let k = 6;
-
-        let r1cs = get_test_r1cs::<Fr>();
         let z = get_test_z::<Fr>(3);
         let mut zs: Vec<Vec<Fr>> = Vec::new();
         for i in 0..k {
             let z_i = get_test_z::<Fr>(i + 4);
             zs.push(z_i);
         }
-
-        // init Prover & Verifier's transcript
-        let mut transcript_p = Transcript::<Fr, G1Projective>::new(&poseidon_config);
-        let mut transcript_v = Transcript::<Fr, G1Projective>::new(&poseidon_config);
 
         let n = z.len();
         let t = log2(n) as usize;
@@ -528,6 +536,20 @@ mod tests {
             instances.push(instance_i);
         }
 
+        (witness, instance, witnesses, instances)
+    }
+
+    #[test]
+    fn test_fold_native_case() {
+        let k = 6;
+        let (witness, instance, witnesses, instances) = prepare_inputs(k);
+        let r1cs = get_test_r1cs::<Fr>();
+
+        // init Prover & Verifier's transcript
+        let poseidon_config = poseidon_test_config::<Fr>();
+        let mut transcript_p = Transcript::<Fr, G1Projective>::new(&poseidon_config);
+        let mut transcript_v = Transcript::<Fr, G1Projective>::new(&poseidon_config);
+
         let (F_coeffs, K_coeffs, folded_instance, folded_witness) = Folding::<G1Projective>::prover(
             &mut transcript_p,
             &r1cs,
@@ -554,6 +576,58 @@ mod tests {
         assert!(!folded_instance.e.is_zero());
 
         // check that the folded instance satisfies the relation
-        assert!(check_instance(&r1cs, folded_instance, folded_witness));
+        assert!(check_instance(&r1cs, &folded_instance, &folded_witness));
+    }
+
+    #[test]
+    fn test_fold_various_iterations() {
+        let r1cs = get_test_r1cs::<Fr>();
+
+        // init Prover & Verifier's transcript
+        let poseidon_config = poseidon_test_config::<Fr>();
+        let mut transcript_p = Transcript::<Fr, G1Projective>::new(&poseidon_config);
+        let mut transcript_v = Transcript::<Fr, G1Projective>::new(&poseidon_config);
+
+        let (mut running_witness, mut running_instance, _, _) = prepare_inputs(0);
+
+        // fold k instances on each of num_iters iterations
+        let k = 6;
+        let num_iters = 10;
+        for _ in 0..num_iters {
+            // generate the instances to be fold
+            let (_, _, witnesses, instances) = prepare_inputs(k);
+
+            let (F_coeffs, K_coeffs, folded_instance, folded_witness) =
+                Folding::<G1Projective>::prover(
+                    &mut transcript_p,
+                    &r1cs,
+                    running_instance.clone(),
+                    running_witness.clone(),
+                    instances.clone(),
+                    witnesses,
+                );
+
+            // veriier
+            let folded_instance_v = Folding::<G1Projective>::verifier(
+                &mut transcript_v,
+                &r1cs,
+                running_instance.clone(),
+                instances,
+                F_coeffs,
+                K_coeffs,
+            );
+
+            // check that prover & verifier folded instances are the same values
+            assert_eq!(folded_instance.phi.0, folded_instance_v.phi.0);
+            assert_eq!(folded_instance.betas, folded_instance_v.betas);
+            assert_eq!(folded_instance.e, folded_instance_v.e);
+            assert!(!folded_instance.e.is_zero());
+
+            // check that the folded instance satisfies the relation
+            assert!(check_instance(&r1cs, &folded_instance, &folded_witness));
+
+            running_witness = folded_witness;
+            running_instance = folded_instance;
+        }
     }
 }
